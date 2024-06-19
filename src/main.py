@@ -1,16 +1,34 @@
+import os
+import pickle
+import time
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pycoingecko import CoinGeckoAPI
-from tqdm import tqdm
 from tradingview_ta import get_multiple_analysis
 
 cg = CoinGeckoAPI()
 
+FIGURE_SIZE = (20, 10)
+BACKGROUND_COLOR = "#0d1117"
+RANGES = {
+    "Overbought": (70, 100),
+    "Strong": (60, 70),
+    "Neutral": (40, 60),
+    "Weak": (30, 40),
+    "Oversold": (0, 30),
+}
+COLORS_LABELS = {
+    "Overbought": "#c32e3b",
+    "Strong": "#681f28",
+    "Neutral": "#0f2427",
+    "Weak": "#144e48",
+    "Oversold": "#1d8b7a",
+}
 
-def get_RSI(coins: list) -> dict:
-    exchange = "BINANCE"
 
+def get_RSI(coins: list, exchange: str = "BINANCE") -> dict:
     # Format symbols exchange:symbol
     symbols = [f"{exchange.upper()}:{symbol}" for symbol in coins]
 
@@ -18,7 +36,7 @@ def get_RSI(coins: list) -> dict:
 
     # For each symbol get the RSI
     rsi_dict = {}
-    for symbol in tqdm(symbols):
+    for symbol in symbols:
         if analysis[symbol] is None:
             # print(f"No analysis for {symbol}")
             continue
@@ -29,12 +47,11 @@ def get_RSI(coins: list) -> dict:
     return rsi_dict
 
 
-def get_top_vol_coins(length: int = 50) -> list:
-    # Maybe add some caching for this
-    df = pd.DataFrame(cg.get_coins_markets("usd"))["symbol"].str.upper() + "USDT"
-
-    # Also add symbols that give issues
-    stableCoins = [
+def get_top_vol_coins(length: int = 100) -> list:
+    CACHE_FILE = "data/top_vol_coins_cache.pkl"
+    CACHE_EXPIRATION = 24 * 60 * 60  # 24 hours in seconds
+    # List of symbols to exclude
+    STABLE_COINS = [
         "OKBUSDT",
         "DAIUSDT",
         "USDTUSDT",
@@ -47,14 +64,33 @@ def get_top_vol_coins(length: int = 50) -> list:
         "CETHUSDT",
         "WBTCUSDT",
     ]
-    sorted_volume = df[~df.isin(stableCoins)]
-    return sorted_volume[:length].tolist()
+
+    # Check if the cache file exists and is not expired
+    os.makedirs(CACHE_FILE.split("/")[0], exist_ok=True)
+    if os.path.exists(CACHE_FILE):
+        with open(CACHE_FILE, "rb") as f:
+            cache_data = pickle.load(f)
+            cache_time = cache_data["timestamp"]
+            if time.time() - cache_time < CACHE_EXPIRATION:
+                # Return the cached data if it's not expired
+                print("Using cached top volume coins")
+                return cache_data["data"][:length]
+
+    # Fetch fresh data if the cache is missing or expired
+    df = pd.DataFrame(cg.get_coins_markets("usd"))["symbol"].str.upper() + "USDT"
+
+    sorted_volume = df[~df.isin(STABLE_COINS)]
+    top_vol_coins = sorted_volume.tolist()
+
+    # Save the result to the cache
+    with open(CACHE_FILE, "wb") as f:
+        pickle.dump({"timestamp": time.time(), "data": top_vol_coins}, f)
+
+    return top_vol_coins[:length]
 
 
-def plot_rsi_heatmap():
-    print("Getting top volume cryptos...")
-    top_vol = get_top_vol_coins(50)
-    print("Getting RSI values...")
+def plot_rsi_heatmap(num_coins: int = 100):
+    top_vol = get_top_vol_coins(num_coins)
     data = get_RSI(top_vol)
 
     # Create lists of labels and RSI values
@@ -65,23 +101,21 @@ def plot_rsi_heatmap():
     average_rsi = np.mean(rsi_values)
 
     # Create the scatter plot
-    fig, ax = plt.subplots(figsize=(20, 10))
-    fig.patch.set_facecolor("black")  # Set the background color of the figure to black
-    ax.set_facecolor("black")  # Set the background color of the axes to black
+    fig, ax = plt.subplots(figsize=FIGURE_SIZE)
+    fig.patch.set_facecolor(
+        BACKGROUND_COLOR
+    )  # Set the background color of the figure to black
+    ax.set_facecolor(BACKGROUND_COLOR)  # Set the background color of the axes to black
 
     # Define the color for each RSI range
-    color_map = [
-        (100, 70, "red", "Overbought"),
-        (70, 60, "darkred", "Strong"),
-        (60, 40, "black", "Neutral"),
-        (40, 30, "darkgreen", "Weak"),
-        (30, 0, "green", "Oversold"),
-    ]
+    color_map = []
+    for k in RANGES:
+        color_map.append((*RANGES[k], COLORS_LABELS[k], k))
 
     # Fill the areas with the specified colors and create custom legend
     legend_elements = []
     for start, end, color, label in color_map:
-        ax.fill_between([0, len(labels) + 2], start, end, color=color, alpha=0.3)
+        ax.fill_between([0, len(labels) + 2], start, end, color=color, alpha=0.35)
 
         # Add the label to the custom legend
         if color == "black":
@@ -116,7 +150,7 @@ def plot_rsi_heatmap():
     ax.tick_params(colors="white", which="both")
 
     # Set the y-axis limits based on RSI values
-    ax.set_ylim(min(rsi_values) - 5, max(rsi_values) + 5)
+    ax.set_ylim(20, 80)
 
     ax.set_xlim(0, len(labels) + 2)
 
@@ -136,14 +170,46 @@ def plot_rsi_heatmap():
         labelcolor="white",
     )
 
-    # Add y-axis label
-    ax.set_ylabel("RSI", color="white", fontsize=12)
-    ax.set_xlabel("Top 50 coins (volume)", color="white", fontsize=12)
-
     # Display the plot
     plt.tight_layout()
 
     plt.show()
+
+
+def add_legend(ax):
+    # Create custom legend handles with square markers, including BTC price
+    legend_handles = [
+        plt.Line2D(
+            [0],
+            [0],
+            marker="s",
+            color=BACKGROUND_COLOR,
+            markerfacecolor=color,
+            markersize=10,
+            label=label,
+        )
+        for color, label in zip(
+            list(COLORS_LABELS.keys()), list(COLORS_LABELS.values())
+        )
+    ]
+
+    # Add legend
+    legend = ax.legend(
+        handles=legend_handles,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.0),
+        ncol=len(legend_handles),
+        frameon=False,
+        fontsize="small",
+        labelcolor="white",
+    )
+
+    # Make legend text bold
+    for text in legend.get_texts():
+        text.set_fontweight("bold")
+
+    # Adjust layout to reduce empty space around the plot
+    plt.subplots_adjust(left=0.05, right=0.95, top=0.875, bottom=0.1)
 
 
 if __name__ == "__main__":
