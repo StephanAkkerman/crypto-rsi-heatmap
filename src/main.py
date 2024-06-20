@@ -10,7 +10,7 @@ from tradingview_ta import get_multiple_analysis
 
 cg = CoinGeckoAPI()
 
-FIGURE_SIZE = (20, 10)
+FIGURE_SIZE = (12, 10)
 BACKGROUND_COLOR = "#0d1117"
 RANGES = {
     "Overbought": (70, 100),
@@ -20,12 +20,26 @@ RANGES = {
     "Oversold": (0, 30),
 }
 COLORS_LABELS = {
-    "Overbought": "#c32e3b",
-    "Strong": "#681f28",
-    "Neutral": "#0f2427",
-    "Weak": "#144e48",
     "Oversold": "#1d8b7a",
+    "Weak": "#144e48",
+    "Neutral": "#0d1117",
+    "Strong": "#681f28",
+    "Overbought": "#c32e3b",
 }
+SCATTER_COLORS = {
+    "Oversold": "#1e9884",
+    "Weak": "#165952",
+    "Neutral": "#78797a",
+    "Strong": "#79212c",
+    "Overbought": "#cf2f3d",
+}
+
+
+def get_color_for_rsi(rsi_value):
+    for label, (low, high) in RANGES.items():
+        if low <= rsi_value < high:
+            return SCATTER_COLORS[label]
+    return None
 
 
 def get_RSI(coins: list, exchange: str = "BINANCE") -> dict:
@@ -113,18 +127,22 @@ def plot_rsi_heatmap(num_coins: int = 100):
         color_map.append((*RANGES[k], COLORS_LABELS[k], k))
 
     # Fill the areas with the specified colors and create custom legend
-    legend_elements = []
     for start, end, color, label in color_map:
         ax.fill_between([0, len(labels) + 2], start, end, color=color, alpha=0.35)
 
-        # Add the label to the custom legend
-        if color == "black":
-            color = "grey"
-        legend_elements.append(plt.Line2D([0], [0], color=color, lw=4, label=label))
+        # TODO: add text the right of the plot with the label (overbought, etc.)
 
     # Plot each point with a white border for visibility
     for i, label in enumerate(labels):
-        ax.scatter(i + 1, rsi_values[i], color="white", edgecolor="black")
+        # These are the dots on the plot
+        ax.scatter(
+            i + 1,
+            rsi_values[i],
+            color=get_color_for_rsi(rsi_values[i]),
+            # edgecolor="black",
+            s=100,
+        )
+        # Add the symbol text
         ax.annotate(
             label,
             (i + 1, rsi_values[i]),
@@ -137,7 +155,7 @@ def plot_rsi_heatmap(num_coins: int = 100):
     # Draw the average RSI line and add the annotation
     ax.axhline(xmin=0, xmax=1, y=average_rsi, color="orange", linestyle="--")
     ax.text(
-        len(labels) + 2,
+        len(labels),  # Increase to move the text to the right
         average_rsi,
         f"AVG RSI: {average_rsi:.2f}",
         color="orange",
@@ -157,27 +175,16 @@ def plot_rsi_heatmap(num_coins: int = 100):
     # Remove the x-axis ticks since we're annotating each point
     ax.set_xticks([])
 
-    # Create the legend at the top
-    ax.legend(
-        handles=legend_elements,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.05),
-        ncol=5,
-        fancybox=True,
-        shadow=True,
-        frameon=False,
-        fontsize="large",
-        labelcolor="white",
-    )
-
-    # Display the plot
-    plt.tight_layout()
+    add_legend(ax)
 
     plt.show()
 
 
 def add_legend(ax):
     # Create custom legend handles with square markers, including BTC price
+    adjusted_colors = list(COLORS_LABELS.values())
+    # Change NEUTRAL color to grey
+    adjusted_colors[2] = "#808080"
     legend_handles = [
         plt.Line2D(
             [0],
@@ -189,7 +196,8 @@ def add_legend(ax):
             label=label,
         )
         for color, label in zip(
-            list(COLORS_LABELS.keys()), list(COLORS_LABELS.values())
+            adjusted_colors,
+            [label.upper() for label in list(COLORS_LABELS.keys())],
         )
     ]
 
@@ -197,7 +205,7 @@ def add_legend(ax):
     legend = ax.legend(
         handles=legend_handles,
         loc="upper center",
-        bbox_to_anchor=(0.5, 1.0),
+        bbox_to_anchor=(0.5, 1.05),
         ncol=len(legend_handles),
         frameon=False,
         fontsize="small",
