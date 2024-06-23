@@ -78,7 +78,7 @@ def plot_rsi_heatmap(num_coins: int = 100, time_frame: str = "1d") -> None:
             symbol.upper(),  # Text to display
             va="center",  # Vertical alignment
             ha="right",  # Horizontal alignment
-            fontsize=20,  # Font size
+            fontsize=15,  # Font size
             color="grey",  # Text color
         )
 
@@ -118,15 +118,17 @@ def plot_rsi_heatmap(num_coins: int = 100, time_frame: str = "1d") -> None:
             )
 
     # Draw the average RSI line and add the annotation
-    ax.axhline(xmin=0, xmax=1, y=average_rsi, color="orange", linestyle="--")
+    ax.axhline(
+        xmin=0, xmax=1, y=average_rsi, color="#d58c3c", linestyle="--", linewidth=0.75
+    )
     ax.text(
         len(rsi_symbols) + 1.5,  # Increase to move the text to the right
         average_rsi,
         f"AVG RSI: {average_rsi:.2f}",
-        color="orange",
+        color="#d58c3c",
         va="bottom",
         ha="right",
-        fontsize=16,
+        fontsize=15,
     )
 
     # Set the color of the tick labels to white
@@ -146,6 +148,19 @@ def plot_rsi_heatmap(num_coins: int = 100, time_frame: str = "1d") -> None:
     # Set the color of the spines to match the background color or make them invisible
     for spine in ax.spines.values():
         spine.set_edgecolor(BACKGROUND_COLOR)
+
+    # Add the title in the top left corner
+    plt.text(
+        -0.025,
+        1.125,
+        "Crypto Market RSI Heatmap",
+        transform=ax.transAxes,
+        fontsize=14,
+        verticalalignment="top",
+        horizontalalignment="left",
+        color="white",
+        weight="bold",
+    )
 
     plt.show()
 
